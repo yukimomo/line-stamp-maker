@@ -70,6 +70,12 @@ class ProcessingConfig(BaseModel):
     mapping_file: Path = Field(Path("mapping.csv"), description="CSV file with filename and text mapping")
     output_dir: Path = Field(Path("out"), description="Output directory")
     
+    # File resolution options
+    ext_priority: str = Field(
+        "heic,jpg,jpeg,png,webp",
+        description="Priority order for file extensions (comma-separated, without dots)"
+    )
+    
     # Processing options
     detect_face: bool = Field(True, description="Whether to detect face for cropping")
     use_segmentation: bool = Field(True, description="Whether to use person segmentation")
@@ -99,20 +105,3 @@ class ProcessingConfig(BaseModel):
         """Create necessary output directories"""
         self.output_dir.mkdir(parents=True, exist_ok=True)
         (self.output_dir / "stickers").mkdir(exist_ok=True)
-
-
-class MappingEntry(BaseModel):
-    """Single mapping entry (filename -> text)"""
-    
-    filename: str = Field(description="Input image filename")
-    text: str = Field(description="Text to overlay on sticker")
-    
-    @field_validator('text')
-    @classmethod
-    def split_text_lines(cls, v: str) -> str:
-        """Ensure text doesn't exceed max lines"""
-        lines = v.split('\n')
-        if len(lines) > 2:
-            # Keep only first 2 lines
-            v = '\n'.join(lines[:2])
-        return v.strip()

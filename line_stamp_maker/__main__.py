@@ -2,6 +2,8 @@
 
 import json
 import shutil
+import logging
+import sys
 from pathlib import Path
 from typing import Optional
 import typer
@@ -9,10 +11,42 @@ from dotenv import load_dotenv
 
 from .config import ProcessingConfig, ImageConfig, TextConfig
 from .image_processor import ImageProcessor
-from .utils import load_mapping_csv
+from .mapping import load_mapping, get_mapping_dict
+
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s: %(message)s"
+)
+logger = logging.getLogger(__name__)
 
 # Load environment variables
 load_dotenv()
+
+
+def _safe_print(text: str, color=None, bold=False) -> None:
+    """Print text safely, handling emoji encoding issues on Windows"""
+    # Replace common emojis with text equivalents for Windows compatibility
+    replacements = {
+        "🎨": "[ART]",
+        "✓": "[OK]",
+        "✗": "[X]",
+        "❌": "[ERR]",
+        "📸": "[PHOTO]",
+        "📦": "[PKG]",
+        "⚠": "[WARN]",
+        "ℹ": "[INFO]",
+    }
+    
+    for emoji, replacement in replacements.items():
+        text = text.replace(emoji, replacement)
+    
+    try:
+        typer.secho(text, fg=color, bold=bold)
+    except (UnicodeEncodeError, UnicodeDecodeError):
+        # Fallback: print without color
+        print(text)
+
 
 app = typer.Typer(
     name="line-stamp-maker",
@@ -62,6 +96,11 @@ def process(
         "-f",
         help="Font size for text overlay"
     ),
+    ext_priority: str = typer.Option(
+        "heic,jpg,jpeg,png,webp",
+        "--ext-priority",
+        help="Priority order for file extensions (comma-separated)"
+    ),
     no_segmentation: bool = typer.Option(
         False,
         "--no-segmentation",
@@ -82,6 +121,12 @@ def process(
         "--zip/--no-zip",
         help="Create upload.zip for LINE Creators Market"
     ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Enable verbose logging"
+    ),
 ):
     """
     Process photos to create LINE stickers.
@@ -89,23 +134,35 @@ def process(
     Example:
         python -m line_stamp_maker process --photos photos --mapping mapping.csv --output out
     """
-    typer.secho("🎨 LINE Stamp Maker", bold=True, fg=typer.colors.CYAN)
+    # Set logging level
+    if verbose:
+        logging.getLogger().setLevel(logging.DEBUG)
+    
+    _safe_print("🎨 LINE Stamp Maker", color=typer.colors.CYAN, bold=True)
     
     # Validate input files
     if not photos_dir.exists():
-        typer.secho(f"❌ Photos directory not found: {photos_dir}", fg=typer.colors.RED)
+        _safe_print(f"❌ Photos directory not found: {photos_dir}", color=typer.colors.RED)
         raise typer.Exit(1)
     
     if not mapping_file.exists():
-        typer.secho(f"❌ Mapping file not found: {mapping_file}", fg=typer.colors.RED)
+        _safe_print(f"❌ Mapping file not found: {mapping_file}", color=typer.colors.RED)
         raise typer.Exit(1)
     
-    # Load mapping
+    # Load mapping with file resolution
     try:
-        mapping = load_mapping_csv(mapping_file)
-        typer.secho(f"✓ Loaded {len(mapping)} images from mapping", fg=typer.colors.GREEN)
+        entries = load_mapping(mapping_file, photos_dir, ext_priority=ext_priority)
+        mapping = get_mapping_dict(entries)
+        
+        resolved = sum(1 for entry in entries if entry.resolved_path is not None)
+        _safe_print(f"✓ Loaded {len(entries)} entries, {resolved} files resolved", color=typer.colors.GREEN)
+        
+        if resolved == 0:
+            _safe_print(f"❌ No files were resolved from mapping", color=typer.colors.RED)
+            raise typer.Exit(1)
+    
     except Exception as e:
-        typer.secho(f"❌ Error loading mapping: {e}", fg=typer.colors.RED)
+        _safe_print(f"❌ Error loading mapping: {e}", color=typer.colors.RED)
         raise typer.Exit(1)
     
     # Create configuration
@@ -133,34 +190,34 @@ def process(
     try:
         processor = ImageProcessor(config)
     except Exception as e:
-        typer.secho(f"❌ Error initializing processor: {e}", fg=typer.colors.RED)
+        _safe_print(f"❌ Error initializing processor: {e}", color=typer.colors.RED)
         raise typer.Exit(1)
     
     # Process batch
-    typer.secho("\n📸 Processing images...", fg=typer.colors.CYAN)
+    _safe_print("\n📸 Processing images...", color=typer.colors.CYAN)
     results = processor.process_batch(mapping)
     
     # Summary
     successful = sum(1 for r in results.values() if r["status"] == "success")
     failed = sum(1 for r in results.values() if r["status"] == "error")
     
-    typer.secho(f"\n✓ Completed: {successful} successful, {failed} failed", fg=typer.colors.GREEN)
+    _safe_print(f"\n✓ Completed: {successful} successful, {failed} failed", color=typer.colors.GREEN)
     
     # Create zip if requested
     if create_zip and successful > 0:
         try:
             zip_path = create_upload_zip(config.output_dir)
-            typer.secho(f"✓ Created {zip_path}", fg=typer.colors.GREEN)
+            _safe_print(f"✓ Created {zip_path}", color=typer.colors.GREEN)
         except Exception as e:
-            typer.secho(f"⚠ Could not create ZIP: {e}", fg=typer.colors.YELLOW)
+            _safe_print(f"⚠ Could not create ZIP: {e}", color=typer.colors.YELLOW)
     
     # Save results summary
     results_file = config.output_dir / "results.json"
     with open(results_file, 'w', encoding='utf-8') as f:
         json.dump(results, f, indent=2, ensure_ascii=False)
     
-    typer.secho(f"✓ Results saved to {results_file}", fg=typer.colors.GREEN)
-    typer.secho(f"✓ Output directory: {config.output_dir.absolute()}", fg=typer.colors.GREEN)
+    _safe_print(f"✓ Results saved to {results_file}", color=typer.colors.GREEN)
+    _safe_print(f"✓ Output directory: {config.output_dir.absolute()}", color=typer.colors.GREEN)
 
 
 @app.command()
@@ -168,19 +225,19 @@ def info():
     """Show information about the tool"""
     from . import __version__
     
-    typer.secho("LINE Stamp Maker", bold=True, fg=typer.colors.CYAN)
-    typer.secho(f"Version: {__version__}", fg=typer.colors.BLUE)
-    typer.secho("\nUsage:", bold=True)
-    typer.secho("  python -m line_stamp_maker process [OPTIONS]", fg=typer.colors.GREEN)
-    typer.secho("\nExample:", bold=True)
-    typer.secho("  python -m line_stamp_maker process \\", dim=True)
-    typer.secho("    --photos photos \\", dim=True)
-    typer.secho("    --mapping mapping.csv \\", dim=True)
-    typer.secho("    --output out", dim=True)
-    typer.secho("\nMapping CSV Format:", bold=True)
-    typer.secho("  filename,text", dim=True)
-    typer.secho("  photo1.jpg,\"Hello World\"", dim=True)
-    typer.secho("  photo2.jpg,\"Line 1\\nLine 2\"", dim=True)
+    _safe_print("LINE Stamp Maker", bold=True, color=typer.colors.CYAN)
+    _safe_print(f"Version: {__version__}", color=typer.colors.BLUE)
+    _safe_print("\nUsage:", bold=True)
+    _safe_print("  python -m line_stamp_maker process [OPTIONS]", color=typer.colors.GREEN)
+    _safe_print("\nExample:", bold=True)
+    _safe_print("  python -m line_stamp_maker process \\")
+    _safe_print("    --photos photos \\")
+    _safe_print("    --mapping mapping.csv \\")
+    _safe_print("    --output out")
+    _safe_print("\nMapping CSV Format:", bold=True)
+    _safe_print("  filename,text")
+    _safe_print("  photo1.jpg,\"Hello World\"")
+    _safe_print("  photo2.jpg,\"Line 1\\nLine 2\"")
 
 
 def create_upload_zip(output_dir: Path) -> Path:

@@ -7,40 +7,6 @@ import numpy as np
 from PIL import Image
 import cv2
 
-from .config import MappingEntry
-
-
-def load_mapping_csv(csv_path: Path) -> dict[str, str]:
-    """
-    Load mapping from CSV file.
-    
-    CSV format:
-    filename,text
-    photo1.jpg,Hello
-    photo2.jpg,World
-    
-    Args:
-        csv_path: Path to mapping.csv file
-        
-    Returns:
-        Dictionary mapping filename to text
-    """
-    mapping = {}
-    
-    try:
-        with open(csv_path, 'r', encoding='utf-8') as f:
-            reader = csv.DictReader(f)
-            for row in reader:
-                if 'filename' in row and 'text' in row:
-                    entry = MappingEntry(filename=row['filename'], text=row['text'])
-                    mapping[entry.filename] = entry.text
-    except FileNotFoundError:
-        raise FileNotFoundError(f"Mapping file not found: {csv_path}")
-    except Exception as e:
-        raise ValueError(f"Error reading mapping file {csv_path}: {e}")
-    
-    return mapping
-
 
 def fix_image_orientation(image: Image.Image) -> Image.Image:
     """

@@ -179,33 +179,31 @@ class ImageProcessor:
         
         return sticker_path, main_path, tab_path
     
-    def process_batch(self, mapping: dict[str, str]) -> dict[str, dict]:
+    def process_batch(self, mapping: dict[Path, str]) -> dict[str, dict]:
         """
         Process batch of images from mapping.
         
         Args:
-            mapping: Dictionary of {filename: text}
+            mapping: Dictionary of {Path: text}
             
         Returns:
             Dictionary with processing results
         """
         results = {}
         
-        for i, (filename, text) in enumerate(mapping.items(), 1):
-            image_path = self.config.photos_dir / filename
-            
+        for i, (image_path, text) in enumerate(mapping.items(), 1):
             if not image_path.exists():
                 print(f"[{i}/{len(mapping)}] File not found: {image_path}")
-                results[filename] = {"status": "error", "message": "File not found"}
+                results[image_path.name] = {"status": "error", "message": "File not found"}
                 continue
             
-            print(f"[{i}/{len(mapping)}] Processing {filename}...")
+            print(f"[{i}/{len(mapping)}] Processing {image_path.name}...")
             
             # Process image
             sticker, main, tab = self.process_image(image_path, text)
             
             if sticker is None:
-                results[filename] = {"status": "error", "message": "Processing failed"}
+                results[image_path.name] = {"status": "error", "message": "Processing failed"}
                 continue
             
             # Generate output name (remove extension, use index)
@@ -215,7 +213,7 @@ class ImageProcessor:
             # Save images
             sticker_path, main_path, tab_path = self.save_stickers(sticker, main, tab, output_num)
             
-            results[filename] = {
+            results[image_path.name] = {
                 "status": "success",
                 "sticker": str(sticker_path),
                 "main": str(main_path),
