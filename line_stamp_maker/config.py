@@ -1,7 +1,7 @@
 """Configuration and Pydantic models for LINE stamp maker"""
 
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Literal
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -48,6 +48,14 @@ class ImageConfig(BaseModel):
 
 class TextConfig(BaseModel):
     """Configuration for text rendering"""
+    
+    # Font settings
+    font_preset: Literal["rounded", "maru", "kiwi", "noto"] = Field(
+        "rounded", description="Font preset (rounded, maru, kiwi, noto)"
+    )
+    font_path: Optional[Path] = Field(
+        None, description="Custom font file path (overrides preset)"
+    )
     
     max_lines: int = Field(2, description="Maximum number of text lines")
     font_size: int = Field(24, description="Font size for text")

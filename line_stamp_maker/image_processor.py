@@ -30,7 +30,11 @@ class ImageProcessor:
         # Initialize tools
         self.face_detector = FaceDetector(confidence_threshold=config.face_detection_confidence) if config.detect_face else None
         self.segmenter = PersonSegmenter() if config.use_segmentation else None
-        self.text_renderer = TextRenderer(font_size=config.text_config.font_size)
+        self.text_renderer = TextRenderer(
+            font_path=str(config.text_config.font_path) if config.text_config.font_path else None,
+            font_size=config.text_config.font_size,
+            preset=config.text_config.font_preset
+        )
         
         # Create output directories
         config.create_output_dirs()

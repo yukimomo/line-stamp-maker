@@ -1,29 +1,100 @@
 """Text rendering functionality for stickers"""
 
-from typing import Optional, Tuple
+from pathlib import Path
+from typing import Optional, Tuple, Literal
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
+
+
+# Font preset mappings
+FONT_PRESETS = {
+    "rounded": "rounded.ttf",
+    "maru": "maru.ttf",  # Maru Gothic
+    "kiwi": "kiwi.ttf",   # Kiwi Maru
+    "noto": "noto-sans-jp.ttf",  # Noto Sans JP
+}
+
+
+def resolve_font_path(
+    preset: Literal["rounded", "maru", "kiwi", "noto"] = "rounded",
+    custom_path: Optional[Path] = None
+) -> Path:
+    """
+    Resolve font file path from preset or custom path.
+    
+    Args:
+        preset: Font preset name (rounded, maru, kiwi, noto)
+        custom_path: Custom font file path (overrides preset)
+        
+    Returns:
+        Path to font file
+        
+    Raises:
+        FileNotFoundError: If font file not found
+        ValueError: If preset is invalid
+    """
+    # If custom path provided, use it
+    if custom_path:
+        custom_path = Path(custom_path)
+        if not custom_path.exists():
+            raise FileNotFoundError(
+                f"Custom font file not found: {custom_path}\n"
+                "Please provide a valid path to a TTF font file."
+            )
+        return custom_path
+    
+    # Validate preset
+    if preset not in FONT_PRESETS:
+        raise ValueError(
+            f"Invalid font preset '{preset}'. "
+            f"Valid options: {', '.join(FONT_PRESETS.keys())}"
+        )
+    
+    # Resolve bundled font file
+    assets_dir = Path(__file__).parent / "assets" / "fonts"
+    font_file = assets_dir / FONT_PRESETS[preset]
+    
+    if not font_file.exists():
+        raise FileNotFoundError(
+            f"Font file missing: {FONT_PRESETS[preset]}\n"
+            f"Location: {font_file}\n"
+            "To download fonts, run: python -m line_stamp_maker fonts-download\n"
+            "Or manually place font files in line_stamp_maker/assets/fonts/"
+        )
+    
+    return font_file
 
 
 class TextRenderer:
     """Renders text on sticker images with background and outline"""
     
-    def __init__(self, font_path: Optional[str] = None, font_size: int = 24):
+    def __init__(
+        self,
+        font_path: Optional[str] = None,
+        font_size: int = 24,
+        preset: Literal["rounded", "maru", "kiwi", "noto"] = "rounded"
+    ):
         """
         Initialize text renderer.
         
         Args:
-            font_path: Path to TTF font file (uses default if None)
+            font_path: Path to TTF font file (overrides preset if provided)
             font_size: Font size in pixels
+            preset: Font preset to use if font_path not provided
         """
         self.font_size = font_size
         
         # Try to load specified font, fall back to default
         try:
-            if font_path:
-                self.font = ImageFont.truetype(font_path, font_size)
-            else:
-                # Try common system fonts on Windows/Linux/Mac
+            # Try to load font from provided path or preset
+            try:
+                if font_path:
+                    resolved_font = Path(font_path)
+                else:
+                    resolved_font = resolve_font_path(preset=preset)
+                self.font = ImageFont.truetype(str(resolved_font), font_size)
+            except FileNotFoundError:
+                # If preset font not found, try common system fonts
                 font_candidates = [
                     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
                     "/System/Library/Fonts/Helvetica.ttc",
@@ -188,7 +259,11 @@ def create_sticker_with_text(image: Image.Image, text: str, config) -> Image.Ima
     Returns:
         Sticker with text
     """
-    renderer = TextRenderer(font_size=config.font_size)
+    renderer = TextRenderer(
+        font_path=str(config.font_path) if config.font_path else None,
+        font_size=config.font_size,
+        preset=config.font_preset
+    )
     
     return renderer.add_text_to_image(
         image,

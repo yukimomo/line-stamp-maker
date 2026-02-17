@@ -113,10 +113,14 @@ Options:
   --sticker-height INTEGER        ステッカー最大高さ [default: 320]
   --border INTEGER, -b INTEGER    白ふち幅（ピクセル） [default: 8]
   --font-size INTEGER, -f INT     フォントサイズ [default: 24]
+  --font-preset TEXT              フォントプリセット (rounded|maru|kiwi|noto) [default: rounded]
+  --font-path PATH                カスタムフォントファイルパス [optional]
+  --ext-priority TEXT             ファイル拡張子優先度 [default: heic,jpg,jpeg,png,webp]
   --no-segmentation              人物セグメンテーションをスキップ
   --no-face-detection            顔検出をスキップ
   --no-shadow                    影効果を無効化
   --zip / --no-zip               ZIP ファイルの作成 [default: --zip]
+  --verbose, -v                  詳細なログを表示
   --help                         ヘルプを表示
 ```
 
@@ -140,6 +144,28 @@ python -m line_stamp_maker process \
 python -m line_stamp_maker process \
   --no-segmentation \
   --output out
+
+# 日本語フォント（Kiwi Maru）を使用
+python -m line_stamp_maker process \
+  --font-preset kiwi \
+  --font-size 28 \
+  --output out
+
+# カスタムフォントファイルを使用
+python -m line_stamp_maker process \
+  --font-path "C:/fonts/MyFont.ttf" \
+  --output out
+
+# すべてのカスタマイズを組み合わせ
+python -m line_stamp_maker process \
+  --photos photos \
+  --mapping mapping.csv \
+  --output out \
+  --sticker-width 300 \
+  --font-preset maru \
+  --font-size 26 \
+  --no-face-detection \
+  --verbose
 ```
 
 ### 情報表示
@@ -208,6 +234,92 @@ pip install pillow-heif
 
 ```bash
 pip install -e ".[heic]"
+```
+
+## フォントプリセットと日本語フォント設定
+
+### フォントプリセット
+
+テキスト描画用に 4 つのフォントプリセットをサポートしています：
+
+| プリセット | フォント名 | 説明 | 用途 |
+|-----------|-----------|------|------|
+| `rounded` | Rounded serif | 丸みのあるセリフ体 | 可愛らしい印象 |
+| `maru` | Maru Gothic | 日本語丸ゴシック | 柔らかい雰囲気 |
+| `kiwi` | Kiwi Maru | Google Fonts 日本語フォント | モダンな感じ |
+| `noto` | Noto Sans JP | Google Noto Sans JP | 標準的な日本語 |
+
+### フォントのインストール
+
+1. **自動ダウンロード（推奨）**:
+
+```bash
+# Python でのダウンロード
+python -m line_stamp_maker fonts-download
+
+# または PowerShell でのダウンロード（Windows）
+.\scripts\download_fonts.ps1
+```
+
+2. **手動インストール**:
+
+Google Fonts から直接ダウンロードして `line_stamp_maker/assets/fonts/` に配置：
+
+- **Noto Sans JP**: https://fonts.google.com/noto/specimen/Noto+Sans+JP
+- **Kiwi Maru**: https://fonts.google.com/specimen/Kiwi+Maru
+- **M PLUS Rounded 1c**: https://fonts.google.com/specimen/M+PLUS+Rounded+1c
+- **Gelasio**: https://fonts.google.com/specimen/Gelasio
+
+### フォントの使用方法
+
+```bash
+# プリセットを指定
+python -m line_stamp_maker process \
+  --font-preset kiwi \
+  --photos photos \
+  --mapping mapping.csv \
+  --output out
+
+# カスタムフォントファイルを使用（プリセット無視）
+python -m line_stamp_maker process \
+  --font-path "/path/to/custom-font.ttf" \
+  --photos photos \
+  --mapping mapping.csv \
+  --output out
+```
+
+### フォント関連オプション
+
+```
+--font-preset {rounded,maru,kiwi,noto}  フォントプリセット [default: rounded]
+--font-path PATH                        カスタムフォントファイルパス [optional]
+--font-size INTEGER, -f INT             フォントサイズ [default: 24]
+```
+
+### トラブルシューティング
+
+**フォントが見つからないエラー**:
+
+```
+FileNotFoundError: Font file missing: noto-sans-jp.ttf
+Location: line_stamp_maker/assets/fonts/noto-sans-jp.ttf
+To download fonts, run: python -m line_stamp_maker fonts-download
+```
+
+→ 以下で解決：
+
+```bash
+python -m line_stamp_maker fonts-download
+```
+
+**自動ダウンロードが失敗した場合**:
+
+1. 手動で Google Fonts からダウンロード
+2. ファイルを `line_stamp_maker/assets/fonts/` に配置
+3. `-force` フラグで再試行：
+
+```bash
+python -m line_stamp_maker fonts-download --force
 ```
 
 ### MediaPipe のエラー

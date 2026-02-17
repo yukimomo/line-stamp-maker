@@ -96,6 +96,16 @@ def process(
         "-f",
         help="Font size for text overlay"
     ),
+    font_preset: str = typer.Option(
+        "rounded",
+        "--font-preset",
+        help="Font preset (rounded, maru, kiwi, noto)"
+    ),
+    font_path: Optional[Path] = typer.Option(
+        None,
+        "--font-path",
+        help="Custom font file path (overrides preset)"
+    ),
     ext_priority: str = typer.Option(
         "heic,jpg,jpeg,png,webp",
         "--ext-priority",
@@ -173,7 +183,11 @@ def process(
         shadow_enabled=not no_shadow
     )
     
-    text_config = TextConfig(font_size=font_size)
+    text_config = TextConfig(
+        font_size=font_size,
+        font_preset=font_preset,
+        font_path=font_path
+    )
     
     config = ProcessingConfig(
         photos_dir=photos_dir,
@@ -296,5 +310,59 @@ def create_upload_zip(output_dir: Path) -> Path:
             shutil.rmtree(temp_dir)
 
 
-if __name__ == "__main__":
-    app()
+@app.command()
+def fonts_download(
+    force: bool = typer.Option(
+        False,
+        "--force",
+        "-f",
+        help="Force re-download of all fonts"
+    )
+):
+    """Download and install font presets for text rendering.
+    
+    Supported presets:
+      - rounded: Rounded serif font
+      - maru: Maru Gothic (Japanese rounded gothic)
+      - kiwi: Kiwi Maru (Japanese rounded font)
+      - noto: Noto Sans JP (Japanese sans-serif)
+    
+    This command downloads fonts from Google Fonts and other sources
+    into line_stamp_maker/assets/fonts/
+    
+    Example:
+        python -m line_stamp_maker fonts-download
+    """
+    import subprocess
+    from pathlib import Path
+    
+    _safe_print("📦 Downloading fonts for LINE Stamp Maker...", color=typer.colors.CYAN, bold=True)
+    
+    # Determine OS and run appropriate script
+    script_dir = Path(__file__).parent.parent / "scripts"
+    
+    # Try Python script first (cross-platform)
+    python_script = script_dir / "download_fonts.py"
+    
+    try:
+        cmd = [sys.executable, str(python_script)]
+        if force:
+            cmd.append("--force")
+        
+        result = subprocess.run(cmd, check=False, capture_output=False)
+        
+        if result.returncode == 0:
+            _safe_print("\n[OK] Fonts downloaded successfully!", color=typer.colors.GREEN, bold=True)
+        else:
+            _safe_print("\n[WARN] Font download completed with warnings", color=typer.colors.YELLOW)
+            _safe_print("Please check the output above for details")
+    
+    except Exception as e:
+        _safe_print(f"\n[ERR] Error running font download script: {e}", color=typer.colors.RED)
+        _safe_print("You can manually download fonts from Google Fonts and place them in:", color=typer.colors.YELLOW)
+        fonts_dir = Path(__file__).parent / "assets" / "fonts"
+        _safe_print(f"  {fonts_dir}", color=typer.colors.YELLOW)
+        raise typer.Exit(1)
+
+
+
