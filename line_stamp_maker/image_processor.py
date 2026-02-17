@@ -10,6 +10,7 @@ from .config import ProcessingConfig, ImageConfig
 from .face_detection import FaceDetector
 from .segmentation import PersonSegmenter
 from .text_renderer import TextRenderer, CaptionRenderer, create_sticker_with_text
+from .io import open_image
 from . import utils
 
 
@@ -56,11 +57,8 @@ class ImageProcessor:
             Tuple of (sticker_image, main_image, tab_image) or (None, None, None) on error
         """
         try:
-            # Load image
-            img_pil = Image.open(image_path)
-            
-            # Fix EXIF orientation
-            img_pil = utils.fix_image_orientation(img_pil)
+            # Load image with HEIC/HEIF support
+            img_pil = open_image(image_path)
             
             # Convert to BGR for OpenCV operations
             img_cv = utils.pil_to_cv2(img_pil)
@@ -84,8 +82,13 @@ class ImageProcessor:
                 # No segmentation, use image as-is
                 person_pil = utils.cv2_to_pil(img_cv).convert('RGBA')
             
-            # Step 3: Add white border
-            bordered = utils.add_white_border(person_pil, self.image_config.border_width)
+            # Step 2.5: Resize to maximum sticker size early to speed up processing
+            max_size = max(self.image_config.sticker_max_width, self.image_config.sticker_max_height)
+            if max(person_pil.width, person_pil.height) > max_size:
+                person_pil.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
+            
+            # Step 3: Skip white border - keep fully transparent background
+            bordered = person_pil
             
             # Step 4: Add shadow (optional)
             if self.image_config.shadow_enabled:
@@ -103,6 +106,8 @@ class ImageProcessor:
                     shadowed,
                     text,
                     style=self.text_config.caption_style,
+                    text_color=self.text_config.caption_text_color,
+                    outline_color=self.text_config.caption_outline_color,
                     outline_px=self.text_config.caption_outline_px,
                     padding_ratio=self.text_config.caption_padding_ratio,
                     max_lines=self.text_config.caption_max_lines
@@ -236,6 +241,6 @@ class ImageProcessor:
                 "tab": str(tab_path)
             }
             
-            print(f"  ✓ Saved to {sticker_path.parent}/{output_num}.png")
+            print(f"  [OK] Saved to {sticker_path.parent}/{output_num}.png")
         
         return results

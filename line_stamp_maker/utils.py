@@ -112,29 +112,60 @@ def create_canvas_with_image(image: Image.Image, canvas_width: int, canvas_heigh
 
 def add_white_border(image: Image.Image, border_width: int) -> Image.Image:
     """
-    Add white border to image. Maintains transparency if present.
+    Add white border to image with transparent background.
     
     Args:
         image: PIL Image object
         border_width: Border width in pixels
         
     Returns:
-        Image with border
+        Image with white border and transparent background
     """
     new_width = image.width + border_width * 2
     new_height = image.height + border_width * 2
     
     if image.mode == 'RGBA':
-        border_image = Image.new('RGBA', (new_width, new_height), (255, 255, 255, 0))
-        # Create white border layer
-        border_layer = Image.new('RGBA', (new_width, new_height), (255, 255, 255, 255))
-        border_image.paste(border_layer, (0, 0))
-        border_image.paste(image, (border_width, border_width), image)
+        # Create transparent background
+        result = Image.new('RGBA', (new_width, new_height), (0, 0, 0, 0))
+        
+        # Create border layer with transparent background and white border
+        from PIL import ImageDraw
+        border_layer = Image.new('RGBA', (new_width, new_height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(border_layer)
+        
+        # Draw white filled rectangle for border
+        for i in range(border_width):
+            draw.rectangle(
+                [(i, i), (new_width - 1 - i, new_height - 1 - i)],
+                outline=(255, 255, 255, 255)
+            )
+        
+        # Fill border area completely white
+        draw.rectangle(
+            [(0, 0), (new_width - 1, border_width - 1)],
+            fill=(255, 255, 255, 255)
+        )
+        draw.rectangle(
+            [(0, new_height - border_width), (new_width - 1, new_height - 1)],
+            fill=(255, 255, 255, 255)
+        )
+        draw.rectangle(
+            [(0, 0), (border_width - 1, new_height - 1)],
+            fill=(255, 255, 255, 255)
+        )
+        draw.rectangle(
+            [(new_width - border_width, 0), (new_width - 1, new_height - 1)],
+            fill=(255, 255, 255, 255)
+        )
+        
+        result = Image.alpha_composite(result, border_layer)
+        result.paste(image, (border_width, border_width), image)
     else:
         border_image = Image.new('RGB', (new_width, new_height), (255, 255, 255))
         border_image.paste(image, (border_width, border_width))
+        result = border_image
     
-    return border_image
+    return result
 
 
 def add_shadow(image: Image.Image, shadow_color: tuple[int, int, int, int], 

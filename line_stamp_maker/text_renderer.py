@@ -94,26 +94,35 @@ class TextRenderer:
                     resolved_font = resolve_font_path(preset=preset)
                 self.font = ImageFont.truetype(str(resolved_font), font_size)
             except FileNotFoundError:
-                # If preset font not found, try common system fonts
-                font_candidates = [
-                    "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
-                    "/System/Library/Fonts/Helvetica.ttc",
-                    "C:\\Windows\\Fonts\\Arial.ttf",
-                    "C:\\Windows\\Fonts\\arial.ttf",
-                ]
-                
-                font_found = False
-                for candidate in font_candidates:
-                    try:
-                        self.font = ImageFont.truetype(candidate, font_size)
-                        font_found = True
-                        break
-                    except (OSError, FileNotFoundError):
-                        continue
-                
-                if not font_found:
-                    # Use default font if no TTF found
-                    self.font = ImageFont.load_default()
+                # If preset font not found, try kiwi.ttf first
+                try:
+                    assets_dir = Path(__file__).parent / "assets" / "fonts"
+                    kiwi_font = assets_dir / "kiwi.ttf"
+                    if kiwi_font.exists():
+                        self.font = ImageFont.truetype(str(kiwi_font), font_size)
+                    else:
+                        raise FileNotFoundError()
+                except (OSError, FileNotFoundError):
+                    # Try common system fonts
+                    font_candidates = [
+                        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
+                        "/System/Library/Fonts/Helvetica.ttc",
+                        "C:\\Windows\\Fonts\\Arial.ttf",
+                        "C:\\Windows\\Fonts\\arial.ttf",
+                    ]
+                    
+                    font_found = False
+                    for candidate in font_candidates:
+                        try:
+                            self.font = ImageFont.truetype(candidate, font_size)
+                            font_found = True
+                            break
+                        except (OSError, FileNotFoundError):
+                            continue
+                    
+                    if not font_found:
+                        # Use default font if no TTF found
+                        self.font = ImageFont.load_default()
         except Exception:
             self.font = ImageFont.load_default()
     
@@ -280,8 +289,8 @@ def create_sticker_with_text(image: Image.Image, text: str, config) -> Image.Ima
 class CaptionRenderer:
     """Renders captions with LINE stamp-like styles (band, bubble, none)"""
     
-    # Default caption area height ratio (26% of canvas height)
-    CAPTION_HEIGHT_RATIO = 0.26
+    # Default caption area height ratio (32% of canvas height)
+    CAPTION_HEIGHT_RATIO = 0.32
     
     # Rounded rectangle corner radius
     ROUNDRECT_RADIUS = 12
@@ -296,6 +305,8 @@ class CaptionRenderer:
         self.font_size_base = font_size_base
         self.font_path = font_path
         self.preset = preset
+        # Base image size for font scaling (standard sticker size)
+        self.base_image_height = 370
     
     def _get_font(self, size: int) -> ImageFont.FreeTypeFont:
         """Load font with given size"""
@@ -305,7 +316,17 @@ class CaptionRenderer:
             else:
                 resolved_font = resolve_font_path(preset=self.preset)
             return ImageFont.truetype(str(resolved_font), size)
-        except Exception:
+        except (FileNotFoundError, Exception):
+            # Fallback to kiwi font if preset not found
+            try:
+                assets_dir = Path(__file__).parent / "assets" / "fonts"
+                kiwi_font = assets_dir / "kiwi.ttf"
+                if kiwi_font.exists():
+                    return ImageFont.truetype(str(kiwi_font), size)
+            except Exception:
+                pass
+            
+            # Final fallback: load_default with larger size
             return ImageFont.load_default()
     
     def _measure_text(self, text: str, font: ImageFont.FreeTypeFont, width: int) -> Tuple[int, int, int]:
@@ -384,14 +405,14 @@ class CaptionRenderer:
         available_width: int,
         available_height: int,
         max_lines: int,
-        start_size: int = 28
+        start_size: int = 64
     ) -> Tuple[str, ImageFont.FreeTypeFont, int]:
         """
         Auto-fit text by reducing font size until it fits.
         
         Returns: (wrapped_text, font, font_size)
         """
-        for size in range(start_size, 8, -2):
+        for size in range(start_size, 14, -2):
             font = self._get_font(size)
             
             # Try to wrap text
@@ -405,9 +426,9 @@ class CaptionRenderer:
                 return wrapped, font, size
         
         # Last resort: smallest size
-        font = self._get_font(8)
+        font = self._get_font(14)
         wrapped = self.wrap_text(text, available_width, font, max_lines)
-        return wrapped, font, 8
+        return wrapped, font, 14
     
     def _draw_rounded_rectangle(
         self,
@@ -446,6 +467,8 @@ class CaptionRenderer:
         image: Image.Image,
         text: str,
         style: Literal["band", "bubble", "none"] = "bubble",
+        text_color: tuple[int, int, int] = (255, 255, 255),
+        outline_color: tuple[int, int, int] = (0, 0, 0),
         outline_px: int = 6,
         padding_ratio: float = 0.06,
         max_lines: int = 2
@@ -457,6 +480,8 @@ class CaptionRenderer:
             image: Input RGBA image
             text: Caption text
             style: Caption style (band, bubble, none)
+            text_color: Text color (R, G, B, default white)
+            outline_color: Text outline color (R, G, B, default black)
             outline_px: Outline width in pixels
             padding_ratio: Padding ratio relative to image size
             max_lines: Maximum number of lines
@@ -472,18 +497,23 @@ class CaptionRenderer:
         
         result = image.copy()
         
-        # Calculate caption area dimensions
+        # Calculate caption area dimensions (fixed at bottom)
         img_width, img_height = image.size
-        caption_height = int(img_height * self.CAPTION_HEIGHT_RATIO)
-        padding = int(max(img_width, img_height) * padding_ratio)
+        
+        # Scale font size based on image height (relative to base size)
+        scale_factor = img_height / self.base_image_height
+        scaled_font_size = max(32, int(self.font_size_base * scale_factor))
+        
+        caption_height = max(120, int(img_height * 0.2))  # At least 120px, max 20% height
+        padding = int(12 * scale_factor)
         
         # Available width for text (with padding)
         available_width = img_width - (padding * 2)
         available_height = caption_height - (padding * 2)
         
-        # Auto-fit text
+        # Auto-fit text with scaled font size
         wrapped_text, font, final_size = self._auto_fit_text(
-            text, available_width, available_height, max_lines, self.font_size_base
+            text, available_width, available_height, max_lines, scaled_font_size
         )
         
         if not wrapped_text:
@@ -492,20 +522,22 @@ class CaptionRenderer:
         # Measure final text
         text_width, text_height, _ = self._measure_text(wrapped_text, font, available_width)
         
-        # Calculate text position (centered in caption area)
+        # Calculate text position for bottom area (centered horizontally, positioned in caption area)
         text_x = (img_width - text_width) // 2
-        caption_y = img_height - caption_height
-        text_y = caption_y + (caption_height - text_height) // 2
+        caption_y = max(img_height - caption_height - 20, int(img_height * 0.5))  # Start at least at 50% from top
+        text_y = caption_y + padding
         
         if style == "band":
             result = self._render_band_caption(
                 result, wrapped_text, font, text_x, text_y, 
-                caption_y, caption_height, outline_px
+                caption_y, caption_height, int(outline_px * scale_factor),
+                text_color, outline_color
             )
         elif style == "bubble":
             result = self._render_bubble_caption(
                 result, wrapped_text, font, text_x, text_y,
-                text_width, text_height, padding, outline_px
+                text_width, text_height, padding, int(outline_px * scale_factor),
+                text_color, outline_color
             )
         
         return result
@@ -519,20 +551,22 @@ class CaptionRenderer:
         text_y: int,
         band_y: int,
         band_height: int,
-        outline_px: int
+        outline_px: int,
+        text_color: tuple[int, int, int],
+        outline_color: tuple[int, int, int]
     ) -> Image.Image:
         """Render band-style caption"""
         # Create layers
         result = image.copy()
         
-        # Create background band layer
+        # Create background band layer (at the very bottom only)
         band_layer = Image.new('RGBA', result.size, (0, 0, 0, 0))
         band_draw = ImageDraw.Draw(band_layer)
         
-        # Draw semi-transparent black band
+        # Draw semi-transparent black band at bottom
         band_draw.rectangle(
-            [0, band_y, result.width, result.height],
-            fill=(0, 0, 0, 90)
+            [0, text_y - 20, result.width, result.height],
+            fill=(0, 0, 0, 100)
         )
         
         result = Image.alpha_composite(result, band_layer)
@@ -550,16 +584,16 @@ class CaptionRenderer:
                     (text_x + adj_x, text_y + adj_y),
                     text,
                     font=font,
-                    fill=(0, 0, 0, 255),
+                    fill=outline_color + (255,),
                     align='center'
                 )
         
-        # Draw main text (white)
+        # Draw main text
         draw.multiline_text(
             (text_x, text_y),
             text,
             font=font,
-            fill=(255, 255, 255, 255),
+            fill=text_color + (255,),
             align='center'
         )
         
@@ -576,20 +610,31 @@ class CaptionRenderer:
         text_width: int,
         text_height: int,
         padding: int,
-        outline_px: int
+        outline_px: int,
+        text_color: tuple[int, int, int],
+        outline_color: tuple[int, int, int]
     ) -> Image.Image:
-        """Render bubble-style caption with rounded rectangle"""
+        """Render bubble-style caption with rounded rectangle at bottom"""
         result = image.copy()
         
         # Create shadow layer
         shadow_layer = Image.new('RGBA', result.size, (0, 0, 0, 0))
         shadow_draw = ImageDraw.Draw(shadow_layer)
         
-        # Calculate bubble bounds with padding
-        bubble_x1 = text_x - padding
+        # Calculate bubble bounds with padding (fixed to bottom area)
+        bubble_x1 = max(padding, text_x - padding)
+        bubble_x2 = min(result.width - padding, text_x + text_width + padding)
         bubble_y1 = text_y - padding
-        bubble_x2 = text_x + text_width + padding
         bubble_y2 = text_y + text_height + padding
+        
+        # Ensure bubble stays within bottom 40% of image
+        max_bubble_y = int(result.height * 0.6)
+        if bubble_y1 < max_bubble_y:
+            # Move bubble down
+            diff = max_bubble_y - bubble_y1
+            bubble_y1 = max_bubble_y
+            bubble_y2 += diff
+            text_y += diff
         
         # Draw shadow (slightly offset)
         shadow_offset = 3
@@ -598,30 +643,17 @@ class CaptionRenderer:
             (bubble_x1 + shadow_offset, bubble_y1 + shadow_offset,
              bubble_x2 + shadow_offset, bubble_y2 + shadow_offset),
             self.ROUNDRECT_RADIUS,
-            (0, 0, 0, 30)
+            (0, 0, 0, 40)
         )
         
         result = Image.alpha_composite(result, shadow_layer)
         
-        # Create bubble background layer
-        bubble_layer = Image.new('RGBA', result.size, (0, 0, 0, 0))
-        bubble_draw = ImageDraw.Draw(bubble_layer)
-        
-        # Draw rounded rectangle with white fill
-        self._draw_rounded_rectangle(
-            bubble_draw,
-            (bubble_x1, bubble_y1, bubble_x2, bubble_y2),
-            self.ROUNDRECT_RADIUS,
-            (255, 255, 255, 220)
-        )
-        
-        result = Image.alpha_composite(result, bubble_layer)
-        
+        # Don't draw bubble background - just text with outline
         # Create text layer with outline
         text_layer = Image.new('RGBA', result.size, (0, 0, 0, 0))
         draw = ImageDraw.Draw(text_layer)
         
-        # Draw text outline (white on dark text)
+        # Draw text outline (thicker for contrast)
         for adj_x in range(-outline_px, outline_px + 1):
             for adj_y in range(-outline_px, outline_px + 1):
                 if abs(adj_x) + abs(adj_y) > outline_px:
@@ -630,16 +662,16 @@ class CaptionRenderer:
                     (text_x + adj_x, text_y + adj_y),
                     text,
                     font=font,
-                    fill=(255, 255, 255, 255),
+                    fill=outline_color + (255,),
                     align='center'
                 )
         
-        # Draw main text (dark color)
+        # Draw main text
         draw.multiline_text(
             (text_x, text_y),
             text,
             font=font,
-            fill=(50, 50, 50, 255),
+            fill=text_color + (255,),
             align='center'
         )
         

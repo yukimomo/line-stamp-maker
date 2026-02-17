@@ -126,6 +126,16 @@ def process(
         "--caption-max-lines",
         help="Maximum number of caption lines"
     ),
+    caption_text_color: str = typer.Option(
+        "255,255,255",
+        "--caption-text-color",
+        help="Caption text color as R,G,B (e.g., 255,255,255 for white)"
+    ),
+    caption_outline_color: str = typer.Option(
+        "0,0,0",
+        "--caption-outline-color",
+        help="Caption text outline color as R,G,B (e.g., 0,0,0 for black)"
+    ),
     ext_priority: str = typer.Option(
         "heic,jpg,jpeg,png,webp",
         "--ext-priority",
@@ -195,6 +205,21 @@ def process(
         _safe_print(f"❌ Error loading mapping: {e}", color=typer.colors.RED)
         raise typer.Exit(1)
     
+    # Parse color strings
+    def parse_color(color_str: str) -> tuple[int, int, int]:
+        """Parse color string like '255,255,255' to (R, G, B) tuple"""
+        try:
+            parts = [int(x.strip()) for x in color_str.split(',')]
+            if len(parts) != 3 or any(not 0 <= p <= 255 for p in parts):
+                raise ValueError()
+            return tuple(parts)  # type: ignore
+        except (ValueError, IndexError):
+            _safe_print(f"❌ Invalid color format: {color_str} (use R,G,B like 255,255,255)", color=typer.colors.RED)
+            raise typer.Exit(1)
+    
+    caption_text_rgb = parse_color(caption_text_color)
+    caption_outline_rgb = parse_color(caption_outline_color)
+    
     # Create configuration
     image_config = ImageConfig(
         sticker_max_width=sticker_width,
@@ -208,6 +233,8 @@ def process(
         font_preset=font_preset,
         font_path=font_path,
         caption_style=caption_style,
+        caption_text_color=caption_text_rgb,
+        caption_outline_color=caption_outline_rgb,
         caption_outline_px=caption_outline_px,
         caption_padding_ratio=caption_padding_ratio,
         caption_max_lines=caption_max_lines

@@ -61,18 +61,25 @@ class PersonSegmenter:
         Returns:
             Tuple of (person_image_with_alpha, refined_mask)
         """
-        # Apply morphological closing to fill small holes
+        # Apply morphological closing multiple times to fill small holes and smooth edges
         kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (kernel_size, kernel_size))
-        refined_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel)
+        refined_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_CLOSE, kernel, iterations=2)
         
-        # Apply slight erosion to remove noise at edges
-        refined_mask = cv2.erode(refined_mask, kernel, iterations=1)
+        # Apply morphological opening to remove small noise
+        refined_mask = cv2.morphologyEx(refined_mask, cv2.MORPH_OPEN, kernel, iterations=1)
         
-        # Apply Gaussian blur for smoother edges
+        # Dilate to restore size after opening
+        refined_mask = cv2.dilate(refined_mask, kernel, iterations=1)
+        
+        # Apply stronger Gaussian blur for smoother edges (larger kernel and iterations)
         refined_mask = cv2.GaussianBlur(refined_mask, (blur_size, blur_size), 0)
+        refined_mask = cv2.GaussianBlur(refined_mask, (blur_size + 2, blur_size + 2), 0)
         
         # Find largest connected component
         refined_mask = self._keep_largest_component(refined_mask)
+        
+        # Apply final smoothing blur
+        refined_mask = cv2.GaussianBlur(refined_mask, (blur_size, blur_size), 0)
         
         # Create RGBA image with alpha channel from mask
         b, g, r = cv2.split(image)
