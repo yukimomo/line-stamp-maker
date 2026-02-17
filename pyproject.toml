@@ -1,0 +1,108 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "line-stamp-maker"
+version = "1.0.0"
+description = "Create LINE stickers from photos with person segmentation and text overlay"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+authors = [
+    {name = "LINE Stamp Maker Contributors"}
+]
+keywords = [
+    "line",
+    "stickers",
+    "image-processing",
+    "segmentation",
+    "mediapipe"
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: End Users/Desktop",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Multimedia :: Graphics :: Graphics Conversion",
+]
+
+dependencies = [
+    "pillow>=10.0.0",
+    "mediapipe==0.10.5",
+    "numpy>=1.24.0",
+    "opencv-python>=4.8.0",
+    "typer[all]>=0.10.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+]
+
+[project.optional-dependencies]
+heic = ["pillow-heif>=0.16.0"]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+]
+all = [
+    "line-stamp-maker[heic]",
+    "line-stamp-maker[dev]",
+]
+
+[project.urls]
+Homepage = "https://github.com/yourusername/line-stamp-maker"
+Repository = "https://github.com/yourusername/line-stamp-maker.git"
+Issues = "https://github.com/yourusername/line-stamp-maker/issues"
+
+[tool.setuptools]
+packages = ["line_stamp_maker"]
+
+[tool.setuptools.package-data]
+line_stamp_maker = ["py.typed"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311", "py312", "py313"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | _build
+  | buck-out
+  | build
+  | dist
+)/
+'''
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = [
+    ".git",
+    ".venv",
+    "build",
+    "dist",
+]
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]

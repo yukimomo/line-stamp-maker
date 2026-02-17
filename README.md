@@ -52,7 +52,7 @@ line-stamp-maker/
 - Python 3.11 以上
 - pip
 
-### セットアップ
+### 基本セットアップ
 
 ```bash
 # リポジトリをクローン
@@ -61,6 +61,20 @@ cd line-stamp-maker
 # 必要なパッケージをインストール
 pip install -r requirements.txt
 ```
+
+### HEIC/HEIF 形式サポート（オプション）
+
+iPhone などで撮影した HEIC/HEIF 形式の画像をサポートする場合：
+
+```bash
+# pyproject.toml を使う場合（推奨）
+pip install -e ".[heic]"
+
+# または手動で
+pip install pillow-heif>=0.16.0
+```
+
+HEIC/HEIF サポートなしで実行したい場合は、上記をスキップして JPG/PNG 形式の画像のみを使用してください。
 
 ## 使用方法
 
@@ -149,6 +163,8 @@ python -m line_stamp_maker info
 
 ## 依存パッケージ
 
+### 必須パッケージ
+
 | パッケージ | 用途 |
 |-----------|------|
 | `pillow` | 画像処理（基本） |
@@ -157,9 +173,42 @@ python -m line_stamp_maker info
 | `opencv-python` | 高度な画像処理、連結成分抽出 |
 | `typer` | CLI フレームワーク |
 | `pydantic` | 設定管理・バリデーション |
-| `python-dotenv` | 環境変数管理（オプション） |
+| `python-dotenv` | 環境変数管理 |
+
+### オプション依存
+
+| パッケージ | 用途 |
+|-----------|------|
+| `pillow-heif` | HEIC/HEIF 形式サポート（iPhone など） |
+
+**インストール方法:**
+```bash
+# オブション依存を含めてインストール
+pip install -e ".[heic]"
+
+# または手動で
+pip install pillow-heif>=0.16.0
+```
 
 ## トラブルシューティング
+
+### HEIC/HEIF 形式が開けない
+
+```
+RuntimeError: HEIC/HEIF support requires pillow-heif
+```
+
+→ HEIC/HEIF サポートをインストール：
+
+```bash
+pip install pillow-heif
+```
+
+または pyproject.toml オプションで：
+
+```bash
+pip install -e ".[heic]"
+```
 
 ### MediaPipe のエラー
 
