@@ -9,7 +9,7 @@ import numpy as np
 from .config import ProcessingConfig, ImageConfig
 from .face_detection import FaceDetector
 from .segmentation import PersonSegmenter
-from .text_renderer import TextRenderer, create_sticker_with_text
+from .text_renderer import TextRenderer, CaptionRenderer, create_sticker_with_text
 from . import utils
 
 
@@ -33,6 +33,11 @@ class ImageProcessor:
         self.text_renderer = TextRenderer(
             font_path=str(config.text_config.font_path) if config.text_config.font_path else None,
             font_size=config.text_config.font_size,
+            preset=config.text_config.font_preset
+        )
+        self.caption_renderer = CaptionRenderer(
+            font_path=str(config.text_config.font_path) if config.text_config.font_path else None,
+            font_size_base=config.text_config.font_size,
             preset=config.text_config.font_preset
         )
         
@@ -92,9 +97,16 @@ class ImageProcessor:
             else:
                 shadowed = bordered
             
-            # Step 5: Add text
+            # Step 5: Add caption
             if text:
-                with_text = create_sticker_with_text(shadowed, text, self.text_config)
+                with_text = self.caption_renderer.render_caption(
+                    shadowed,
+                    text,
+                    style=self.text_config.caption_style,
+                    outline_px=self.text_config.caption_outline_px,
+                    padding_ratio=self.text_config.caption_padding_ratio,
+                    max_lines=self.text_config.caption_max_lines
+                )
             else:
                 with_text = shadowed
             

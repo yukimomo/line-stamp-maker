@@ -106,6 +106,26 @@ def process(
         "--font-path",
         help="Custom font file path (overrides preset)"
     ),
+    caption_style: str = typer.Option(
+        "bubble",
+        "--caption-style",
+        help="Caption style (band, bubble, none)"
+    ),
+    caption_outline_px: int = typer.Option(
+        6,
+        "--caption-outline-px",
+        help="Caption text outline width in pixels"
+    ),
+    caption_padding_ratio: float = typer.Option(
+        0.06,
+        "--caption-padding-ratio",
+        help="Caption padding ratio relative to canvas"
+    ),
+    caption_max_lines: int = typer.Option(
+        2,
+        "--caption-max-lines",
+        help="Maximum number of caption lines"
+    ),
     ext_priority: str = typer.Option(
         "heic,jpg,jpeg,png,webp",
         "--ext-priority",
@@ -186,7 +206,11 @@ def process(
     text_config = TextConfig(
         font_size=font_size,
         font_preset=font_preset,
-        font_path=font_path
+        font_path=font_path,
+        caption_style=caption_style,
+        caption_outline_px=caption_outline_px,
+        caption_padding_ratio=caption_padding_ratio,
+        caption_max_lines=caption_max_lines
     )
     
     config = ProcessingConfig(

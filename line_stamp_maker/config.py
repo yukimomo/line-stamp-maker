@@ -65,6 +65,18 @@ class TextConfig(BaseModel):
     background_color: tuple[int, int, int, int] = Field((100, 100, 100, 200), description="Text background color (R, G, B, A)")
     background_height: int = Field(50, description="Height of text background area")
     padding: int = Field(10, description="Padding for text area")
+    
+    # Caption style settings
+    caption_style: Literal["band", "bubble", "none"] = Field(
+        "bubble", description="Caption style (band, bubble, none)"
+    )
+    caption_outline_px: int = Field(6, description="Caption text outline width in pixels")
+    caption_padding_ratio: float = Field(
+        0.06, description="Caption padding ratio (0.0-1.0) relative to canvas size"
+    )
+    caption_max_lines: int = Field(2, description="Maximum number of caption lines")
+    background_height: int = Field(50, description="Height of text background area")
+    padding: int = Field(10, description="Padding for text area")
 
 
 class ProcessingConfig(BaseModel):

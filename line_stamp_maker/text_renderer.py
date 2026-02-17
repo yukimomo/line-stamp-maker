@@ -275,3 +275,373 @@ def create_sticker_with_text(image: Image.Image, text: str, config) -> Image.Ima
         background_height=config.background_height,
         padding=config.padding
     )
+
+
+class CaptionRenderer:
+    """Renders captions with LINE stamp-like styles (band, bubble, none)"""
+    
+    # Default caption area height ratio (26% of canvas height)
+    CAPTION_HEIGHT_RATIO = 0.26
+    
+    # Rounded rectangle corner radius
+    ROUNDRECT_RADIUS = 12
+    
+    def __init__(
+        self,
+        font_path: Optional[str] = None,
+        font_size_base: int = 24,
+        preset: Literal["rounded", "maru", "kiwi", "noto"] = "rounded"
+    ):
+        """Initialize caption renderer"""
+        self.font_size_base = font_size_base
+        self.font_path = font_path
+        self.preset = preset
+    
+    def _get_font(self, size: int) -> ImageFont.FreeTypeFont:
+        """Load font with given size"""
+        try:
+            if self.font_path:
+                resolved_font = Path(self.font_path)
+            else:
+                resolved_font = resolve_font_path(preset=self.preset)
+            return ImageFont.truetype(str(resolved_font), size)
+        except Exception:
+            return ImageFont.load_default()
+    
+    def _measure_text(self, text: str, font: ImageFont.FreeTypeFont, width: int) -> Tuple[int, int, int]:
+        """
+        Measure text and calculate width/height for given font.
+        Returns: (text_width, text_height, line_count)
+        """
+        temp_img = Image.new('RGBA', (1, 1))
+        draw = ImageDraw.Draw(temp_img)
+        bbox = draw.multiline_textbbox((0, 0), text, font=font)
+        width = bbox[2] - bbox[0]
+        height = bbox[3] - bbox[1]
+        lines = len(text.split('\n'))
+        return width, height, lines
+    
+    def wrap_text(
+        self,
+        text: str,
+        max_width: int,
+        font: ImageFont.FreeTypeFont,
+        max_lines: int = 2
+    ) -> str:
+        """
+        Wrap text by character count with width measurement.
+        
+        Args:
+            text: Text to wrap
+            max_width: Maximum pixel width
+            font: Font to use for measurement
+            max_lines: Maximum number of lines
+            
+        Returns:
+            Wrapped text
+        """
+        # Respect existing newlines
+        original_lines = text.split('\n')
+        wrapped_lines = []
+        
+        for line in original_lines:
+            if wrapped_lines and len(wrapped_lines) >= max_lines:
+                break
+            
+            # Try to fit line
+            if line == '':
+                wrapped_lines.append(line)
+                continue
+            
+            # Binary search for fit
+            fitted_line = ''
+            for i in range(len(line) + 1):
+                test_text = line[:i]
+                temp_img = Image.new('RGBA', (1, 1))
+                draw = ImageDraw.Draw(temp_img)
+                bbox = draw.textbbox((0, 0), test_text, font=font)
+                if bbox[2] - bbox[0] <= max_width:
+                    fitted_line = test_text
+                else:
+                    break
+            
+            if fitted_line:
+                wrapped_lines.append(fitted_line)
+                remaining = line[len(fitted_line):].lstrip()
+                if remaining:
+                    # Recursively wrap remaining text
+                    more_lines = self.wrap_text(remaining, max_width, font, max_lines - len(wrapped_lines))
+                    wrapped_lines.extend(more_lines.split('\n'))
+            
+            if len(wrapped_lines) >= max_lines:
+                break
+        
+        return '\n'.join(wrapped_lines[:max_lines])
+    
+    def _auto_fit_text(
+        self,
+        text: str,
+        available_width: int,
+        available_height: int,
+        max_lines: int,
+        start_size: int = 28
+    ) -> Tuple[str, ImageFont.FreeTypeFont, int]:
+        """
+        Auto-fit text by reducing font size until it fits.
+        
+        Returns: (wrapped_text, font, font_size)
+        """
+        for size in range(start_size, 8, -2):
+            font = self._get_font(size)
+            
+            # Try to wrap text
+            wrapped = self.wrap_text(text, available_width, font, max_lines)
+            
+            # Measure wrapped text
+            text_width, text_height, line_count = self._measure_text(wrapped, font, available_width)
+            
+            # Check if fits
+            if text_height <= available_height and line_count <= max_lines:
+                return wrapped, font, size
+        
+        # Last resort: smallest size
+        font = self._get_font(8)
+        wrapped = self.wrap_text(text, available_width, font, max_lines)
+        return wrapped, font, 8
+    
+    def _draw_rounded_rectangle(
+        self,
+        draw: ImageDraw.ImageDraw,
+        bbox: Tuple[int, int, int, int],
+        radius: int,
+        fill: Tuple[int, int, int, int],
+        outline: Optional[Tuple[int, int, int, int]] = None
+    ) -> None:
+        """Draw rounded rectangle with alpha"""
+        x1, y1, x2, y2 = bbox
+        r = radius
+        
+        # Draw four corners and connect edges
+        points = [
+            (x1 + r, y1),  # top left
+            (x2 - r, y1),  # top right
+            (x2, y1 + r),
+            (x2, y2 - r),
+            (x2 - r, y2),  # bottom right
+            (x1 + r, y2),  # bottom left
+            (x1, y2 - r),
+            (x1, y1 + r),
+        ]
+        
+        draw.polygon(points, fill=fill)
+        
+        # Draw corners
+        draw.ellipse([x1, y1, x1 + r * 2, y1 + r * 2], fill=fill)
+        draw.ellipse([x2 - r * 2, y1, x2, y1 + r * 2], fill=fill)
+        draw.ellipse([x2 - r * 2, y2 - r * 2, x2, y2], fill=fill)
+        draw.ellipse([x1, y2 - r * 2, x1 + r * 2, y2], fill=fill)
+    
+    def render_caption(
+        self,
+        image: Image.Image,
+        text: str,
+        style: Literal["band", "bubble", "none"] = "bubble",
+        outline_px: int = 6,
+        padding_ratio: float = 0.06,
+        max_lines: int = 2
+    ) -> Image.Image:
+        """
+        Render caption on image with specified style.
+        
+        Args:
+            image: Input RGBA image
+            text: Caption text
+            style: Caption style (band, bubble, none)
+            outline_px: Outline width in pixels
+            padding_ratio: Padding ratio relative to image size
+            max_lines: Maximum number of lines
+            
+        Returns:
+            Image with caption
+        """
+        if not text or style == "none":
+            return image
+        
+        if image.mode != 'RGBA':
+            image = image.convert('RGBA')
+        
+        result = image.copy()
+        
+        # Calculate caption area dimensions
+        img_width, img_height = image.size
+        caption_height = int(img_height * self.CAPTION_HEIGHT_RATIO)
+        padding = int(max(img_width, img_height) * padding_ratio)
+        
+        # Available width for text (with padding)
+        available_width = img_width - (padding * 2)
+        available_height = caption_height - (padding * 2)
+        
+        # Auto-fit text
+        wrapped_text, font, final_size = self._auto_fit_text(
+            text, available_width, available_height, max_lines, self.font_size_base
+        )
+        
+        if not wrapped_text:
+            return result
+        
+        # Measure final text
+        text_width, text_height, _ = self._measure_text(wrapped_text, font, available_width)
+        
+        # Calculate text position (centered in caption area)
+        text_x = (img_width - text_width) // 2
+        caption_y = img_height - caption_height
+        text_y = caption_y + (caption_height - text_height) // 2
+        
+        if style == "band":
+            result = self._render_band_caption(
+                result, wrapped_text, font, text_x, text_y, 
+                caption_y, caption_height, outline_px
+            )
+        elif style == "bubble":
+            result = self._render_bubble_caption(
+                result, wrapped_text, font, text_x, text_y,
+                text_width, text_height, padding, outline_px
+            )
+        
+        return result
+    
+    def _render_band_caption(
+        self,
+        image: Image.Image,
+        text: str,
+        font: ImageFont.FreeTypeFont,
+        text_x: int,
+        text_y: int,
+        band_y: int,
+        band_height: int,
+        outline_px: int
+    ) -> Image.Image:
+        """Render band-style caption"""
+        # Create layers
+        result = image.copy()
+        
+        # Create background band layer
+        band_layer = Image.new('RGBA', result.size, (0, 0, 0, 0))
+        band_draw = ImageDraw.Draw(band_layer)
+        
+        # Draw semi-transparent black band
+        band_draw.rectangle(
+            [0, band_y, result.width, result.height],
+            fill=(0, 0, 0, 90)
+        )
+        
+        result = Image.alpha_composite(result, band_layer)
+        
+        # Create text layer
+        text_layer = Image.new('RGBA', result.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(text_layer)
+        
+        # Draw text outline
+        for adj_x in range(-outline_px, outline_px + 1):
+            for adj_y in range(-outline_px, outline_px + 1):
+                if abs(adj_x) + abs(adj_y) > outline_px:
+                    continue
+                draw.multiline_text(
+                    (text_x + adj_x, text_y + adj_y),
+                    text,
+                    font=font,
+                    fill=(0, 0, 0, 255),
+                    align='center'
+                )
+        
+        # Draw main text (white)
+        draw.multiline_text(
+            (text_x, text_y),
+            text,
+            font=font,
+            fill=(255, 255, 255, 255),
+            align='center'
+        )
+        
+        result = Image.alpha_composite(result, text_layer)
+        return result
+    
+    def _render_bubble_caption(
+        self,
+        image: Image.Image,
+        text: str,
+        font: ImageFont.FreeTypeFont,
+        text_x: int,
+        text_y: int,
+        text_width: int,
+        text_height: int,
+        padding: int,
+        outline_px: int
+    ) -> Image.Image:
+        """Render bubble-style caption with rounded rectangle"""
+        result = image.copy()
+        
+        # Create shadow layer
+        shadow_layer = Image.new('RGBA', result.size, (0, 0, 0, 0))
+        shadow_draw = ImageDraw.Draw(shadow_layer)
+        
+        # Calculate bubble bounds with padding
+        bubble_x1 = text_x - padding
+        bubble_y1 = text_y - padding
+        bubble_x2 = text_x + text_width + padding
+        bubble_y2 = text_y + text_height + padding
+        
+        # Draw shadow (slightly offset)
+        shadow_offset = 3
+        self._draw_rounded_rectangle(
+            shadow_draw,
+            (bubble_x1 + shadow_offset, bubble_y1 + shadow_offset,
+             bubble_x2 + shadow_offset, bubble_y2 + shadow_offset),
+            self.ROUNDRECT_RADIUS,
+            (0, 0, 0, 30)
+        )
+        
+        result = Image.alpha_composite(result, shadow_layer)
+        
+        # Create bubble background layer
+        bubble_layer = Image.new('RGBA', result.size, (0, 0, 0, 0))
+        bubble_draw = ImageDraw.Draw(bubble_layer)
+        
+        # Draw rounded rectangle with white fill
+        self._draw_rounded_rectangle(
+            bubble_draw,
+            (bubble_x1, bubble_y1, bubble_x2, bubble_y2),
+            self.ROUNDRECT_RADIUS,
+            (255, 255, 255, 220)
+        )
+        
+        result = Image.alpha_composite(result, bubble_layer)
+        
+        # Create text layer with outline
+        text_layer = Image.new('RGBA', result.size, (0, 0, 0, 0))
+        draw = ImageDraw.Draw(text_layer)
+        
+        # Draw text outline (white on dark text)
+        for adj_x in range(-outline_px, outline_px + 1):
+            for adj_y in range(-outline_px, outline_px + 1):
+                if abs(adj_x) + abs(adj_y) > outline_px:
+                    continue
+                draw.multiline_text(
+                    (text_x + adj_x, text_y + adj_y),
+                    text,
+                    font=font,
+                    fill=(255, 255, 255, 255),
+                    align='center'
+                )
+        
+        # Draw main text (dark color)
+        draw.multiline_text(
+            (text_x, text_y),
+            text,
+            font=font,
+            fill=(50, 50, 50, 255),
+            align='center'
+        )
+        
+        result = Image.alpha_composite(result, text_layer)
+        return result
