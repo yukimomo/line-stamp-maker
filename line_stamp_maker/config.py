@@ -1,3 +1,6 @@
+        caption_style: Literal["band", "bubble", "none"] = Field("bubble", description="Caption style (band, bubble, none)")
+        bubble_stroke: int = Field(3, description="Bubble stroke width (px)")
+        bubble_shadow: bool = Field(True, description="Enable bubble shadow")
     outline_outer: int = Field(10, description="Outer outline thickness (px)")
     outline_inner: int = Field(4, description="Inner outline thickness (px)")
     shadow_enabled: bool = Field(True, description="Enable sticker shadow")
@@ -89,6 +92,8 @@ class TextConfig(BaseModel):
     caption_style: Literal["band", "bubble", "none"] = Field(
         "bubble", description="Caption style (band, bubble, none)"
     )
+    bubble_stroke: int = Field(3, description="Bubble stroke width (px)")
+    bubble_shadow: bool = Field(True, description="Enable bubble shadow")
     caption_text_color: tuple[int, int, int] = Field(
         (255, 255, 255), description="Caption text color (R, G, B) - white by default"
     )
