@@ -1,3 +1,28 @@
+def select_best_component(mask: np.ndarray, face_center=None) -> np.ndarray:
+    """
+    マスク内の接続成分から、face_centerがあれば最も近い成分を選択。
+    なければ最大面積成分。
+    Args:
+        mask: バイナリマスク（0/255）
+        face_center: (x, y) or None
+    Returns:
+        選択された成分のみ255のマスク
+    """
+    num_labels, labels, stats, centroids = cv2.connectedComponentsWithStats(mask, connectivity=8)
+    if num_labels <= 1:
+        return mask
+    # 背景除外
+    valid = range(1, num_labels)
+    if face_center is not None:
+        # 顔中心に最も近い成分
+        dists = [np.linalg.norm(np.array(centroids[i]) - np.array(face_center)) for i in valid]
+        best = valid[np.argmin(dists)]
+    else:
+        # 最大面積
+        best = 1 + np.argmax([stats[i, cv2.CC_STAT_AREA] for i in valid])
+    result = np.zeros_like(mask)
+    result[labels == best] = 255
+    return result
 import numpy as np
 import cv2
 
