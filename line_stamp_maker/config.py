@@ -1,3 +1,6 @@
+    outline_outer: int = Field(10, description="Outer outline thickness (px)")
+    outline_inner: int = Field(4, description="Inner outline thickness (px)")
+    shadow_enabled: bool = Field(True, description="Enable sticker shadow")
 """Configuration and Pydantic models for LINE stamp maker"""
 
 from pathlib import Path
@@ -11,6 +14,10 @@ class ImageConfig(BaseModel):
     mask_feather: int = Field(3, description="Feather (px) for mask edge smoothing")
     mask_close_kernel: int = Field(5, description="Morphological close kernel size (px)")
     mask_open_kernel: int = Field(3, description="Morphological open kernel size (px)")
+    # Outline settings
+    outline_outer: int = Field(10, description="Outer outline thickness (px)")
+    outline_inner: int = Field(4, description="Inner outline thickness (px)")
+    shadow_enabled: bool = Field(True, description="Enable sticker shadow")
 
 from pathlib import Path
 from typing import Optional, Literal
