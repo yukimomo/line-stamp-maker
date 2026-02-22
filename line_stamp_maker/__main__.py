@@ -46,6 +46,9 @@ def _safe_print(text: str, color=None, bold=False) -> None:
     except (UnicodeEncodeError, UnicodeDecodeError):
         # Fallback: print without color
         print(text)
+    
+    # Ensure output is flushed immediately
+    sys.stdout.flush()
 
 
 app = typer.Typer(
@@ -99,7 +102,7 @@ def process(
     font_preset: str = typer.Option(
         "rounded",
         "--font-preset",
-        help="Font preset (rounded, maru, kiwi, noto)"
+        help="Font preset (rounded, maru, kiwi, noto, indie-flower, kalam, cabin-sketch)"
     ),
     font_path: Optional[Path] = typer.Option(
         None,
@@ -147,9 +150,9 @@ def process(
         help="Skip person segmentation (use image as-is)"
     ),
     no_face_detection: bool = typer.Option(
-        False,
-        "--no-face-detection",
-        help="Skip face detection for cropping"
+        True,
+        "--no-face-detection/--enable-face-detection",
+        help="Skip face detection for cropping (default: skip)"
     ),
     no_shadow: bool = typer.Option(
         False,
@@ -260,7 +263,13 @@ def process(
     
     # Process batch
     _safe_print("\n📸 Processing images...", color=typer.colors.CYAN)
-    results = processor.process_batch(mapping)
+    try:
+        results = processor.process_batch(mapping)
+    except Exception as e:
+        _safe_print(f"❌ Error during processing: {e}", color=typer.colors.RED)
+        import traceback
+        _safe_print(traceback.format_exc(), color=typer.colors.RED)
+        raise typer.Exit(1)
     
     # Summary
     successful = sum(1 for r in results.values() if r["status"] == "success")
@@ -277,11 +286,14 @@ def process(
             _safe_print(f"⚠ Could not create ZIP: {e}", color=typer.colors.YELLOW)
     
     # Save results summary
-    results_file = config.output_dir / "results.json"
-    with open(results_file, 'w', encoding='utf-8') as f:
-        json.dump(results, f, indent=2, ensure_ascii=False)
+    try:
+        results_file = config.output_dir / "results.json"
+        with open(results_file, 'w', encoding='utf-8') as f:
+            json.dump(results, f, indent=2, ensure_ascii=False)
+        _safe_print(f"✓ Results saved to {results_file}", color=typer.colors.GREEN)
+    except Exception as e:
+        _safe_print(f"⚠ Could not save results: {e}", color=typer.colors.YELLOW)
     
-    _safe_print(f"✓ Results saved to {results_file}", color=typer.colors.GREEN)
     _safe_print(f"✓ Output directory: {config.output_dir.absolute()}", color=typer.colors.GREEN)
 
 
@@ -416,4 +428,11 @@ def fonts_download(
         raise typer.Exit(1)
 
 
+# Entry point
+app()
 
+
+
+
+# Entry point for python -m line_stamp_maker
+app()

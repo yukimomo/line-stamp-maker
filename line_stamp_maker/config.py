@@ -50,8 +50,8 @@ class TextConfig(BaseModel):
     """Configuration for text rendering"""
     
     # Font settings
-    font_preset: Literal["rounded", "maru", "kiwi", "noto"] = Field(
-        "rounded", description="Font preset (rounded, maru, kiwi, noto)"
+    font_preset: Literal["rounded", "maru", "kiwi", "noto", "indie-flower", "kalam", "cabin-sketch"] = Field(
+        "rounded", description="Font preset (rounded, maru, kiwi, noto, indie-flower, kalam, cabin-sketch)"
     )
     font_path: Optional[Path] = Field(
         None, description="Custom font file path (overrides preset)"
@@ -101,7 +101,7 @@ class ProcessingConfig(BaseModel):
     )
     
     # Processing options
-    detect_face: bool = Field(True, description="Whether to detect face for cropping")
+    detect_face: bool = Field(False, description="Whether to detect face for cropping")
     use_segmentation: bool = Field(True, description="Whether to use person segmentation")
     create_zip: bool = Field(True, description="Whether to create upload.zip")
     

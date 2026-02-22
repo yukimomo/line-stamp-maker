@@ -12,11 +12,14 @@ FONT_PRESETS = {
     "maru": "maru.ttf",  # Maru Gothic
     "kiwi": "kiwi.ttf",   # Kiwi Maru
     "noto": "noto-sans-jp.ttf",  # Noto Sans JP
+    "indie-flower": "indie-flower.ttf",  # Handwriting style
+    "kalam": "kalam.ttf",  # Handwriting style
+    "cabin-sketch": "cabin-sketch.ttf",  # Sketch style
 }
 
 
 def resolve_font_path(
-    preset: Literal["rounded", "maru", "kiwi", "noto"] = "rounded",
+    preset: Literal["rounded", "maru", "kiwi", "noto", "indie-flower", "kalam", "cabin-sketch"] = "rounded",
     custom_path: Optional[Path] = None
 ) -> Path:
     """
@@ -299,7 +302,7 @@ class CaptionRenderer:
         self,
         font_path: Optional[str] = None,
         font_size_base: int = 24,
-        preset: Literal["rounded", "maru", "kiwi", "noto"] = "rounded"
+        preset: Literal["rounded", "maru", "kiwi", "noto", "indie-flower", "kalam", "cabin-sketch"] = "rounded"
     ):
         """Initialize caption renderer"""
         self.font_size_base = font_size_base
@@ -308,13 +311,34 @@ class CaptionRenderer:
         # Base image size for font scaling (standard sticker size)
         self.base_image_height = 370
     
-    def _get_font(self, size: int) -> ImageFont.FreeTypeFont:
-        """Load font with given size"""
+    def _contains_japanese(self, text: str) -> bool:
+        """Check if text contains Japanese characters"""
+        for char in text:
+            code_point = ord(char)
+            # Hiragana: 0x3040-0x309F
+            # Katakana: 0x30A0-0x30FF
+            # Kanji: 0x4E00-0x9FFF
+            if (0x3040 <= code_point <= 0x309F or  # Hiragana
+                0x30A0 <= code_point <= 0x30FF or  # Katakana
+                0x4E00 <= code_point <= 0x9FFF):    # Kanji
+                return True
+        return False
+    
+    def _get_font(self, size: int, text: str = "") -> ImageFont.FreeTypeFont:
+        """Load font with given size, auto-fallback to Japanese font if needed"""
+        # Check if text contains Japanese
+        needs_japanese = self._contains_japanese(text)
+        
         try:
             if self.font_path:
                 resolved_font = Path(self.font_path)
             else:
-                resolved_font = resolve_font_path(preset=self.preset)
+                # If Japanese detected and current font doesn't support it, use kiwi
+                if needs_japanese and self.preset in ["indie-flower", "kalam", "cabin-sketch"]:
+                    assets_dir = Path(__file__).parent / "assets" / "fonts"
+                    resolved_font = assets_dir / "kiwi.ttf"
+                else:
+                    resolved_font = resolve_font_path(preset=self.preset)
             return ImageFont.truetype(str(resolved_font), size)
         except (FileNotFoundError, Exception):
             # Fallback to kiwi font if preset not found
@@ -413,7 +437,7 @@ class CaptionRenderer:
         Returns: (wrapped_text, font, font_size)
         """
         for size in range(start_size, 14, -2):
-            font = self._get_font(size)
+            font = self._get_font(size, text)
             
             # Try to wrap text
             wrapped = self.wrap_text(text, available_width, font, max_lines)
@@ -426,7 +450,7 @@ class CaptionRenderer:
                 return wrapped, font, size
         
         # Last resort: smallest size
-        font = self._get_font(14)
+        font = self._get_font(14, text)
         wrapped = self.wrap_text(text, available_width, font, max_lines)
         return wrapped, font, 14
     
