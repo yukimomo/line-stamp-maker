@@ -72,8 +72,13 @@ class ImageProcessor:
             
             # Step 2: Person segmentation and cutout
             if self.config.use_segmentation and self.segmenter:
-                person_img_rgba, mask = self.segmenter.extract_person(img_cv, keep_largest_only=True)
-                
+                # configからマスクパラメータ取得
+                feather = getattr(self.image_config, 'mask_feather', 3)
+                close_kernel = getattr(self.image_config, 'mask_close_kernel', 5)
+                open_kernel = getattr(self.image_config, 'mask_open_kernel', 3)
+                person_img_rgba, mask = self.segmenter.extract_person(
+                    img_cv, keep_largest_only=True,
+                    feather=feather, close_kernel=close_kernel, open_kernel=open_kernel)
                 # Convert to PIL
                 b, g, r, a = cv2.split(person_img_rgba)
                 person_img_rgb = cv2.merge((r, g, b, a))

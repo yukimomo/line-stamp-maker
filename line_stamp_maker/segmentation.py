@@ -48,28 +48,15 @@ class PersonSegmenter:
         return binary_mask, segmentation_mask
     
     def create_person_image(self, image: np.ndarray, binary_mask: np.ndarray,
-                           kernel_size: int = 5, blur_size: int = 5) -> Tuple[np.ndarray, np.ndarray]:
+                           feather: int = 3, close_kernel: int = 5, open_kernel: int = 3) -> Tuple[np.ndarray, np.ndarray]:
         """
-        Create person cutout with refined mask.
-        
-        Args:
-            image: Input image in BGR format
-            binary_mask: Binary segmentation mask
-            kernel_size: Kernel size for morphological operations
-            blur_size: Kernel size for Gaussian blur
-            
-        Returns:
-            Tuple of (person_image_with_alpha, refined_mask)
+        Create person cutout with refined mask using smooth_alpha_mask.
         """
-        # Simple blur without morphological operations to avoid artifacts
-        refined_mask = cv2.GaussianBlur(binary_mask, (5, 5), 0)
-        
-        # Create RGBA image with alpha channel from mask
+        from .mask import smooth_alpha_mask
+        refined_mask = smooth_alpha_mask(binary_mask, feather, close_kernel, open_kernel)
         b, g, r = cv2.split(image)
         alpha = refined_mask
-        
         person_image = cv2.merge((b, g, r, alpha))
-        
         return person_image, refined_mask
     
     def _keep_largest_component(self, mask: np.ndarray) -> np.ndarray:
@@ -98,31 +85,26 @@ class PersonSegmenter:
         
         return result
     
-    def extract_person(self, image: np.ndarray, keep_largest_only: bool = True) -> Tuple[np.ndarray, np.ndarray]:
+    def extract_person(self, image: np.ndarray, keep_largest_only: bool = True,
+                      feather: int = 3, close_kernel: int = 5, open_kernel: int = 3) -> Tuple[np.ndarray, np.ndarray]:
         """
         Extract person from image with transparent background.
         
         Args:
             image: Input image in BGR format
             keep_largest_only: If True, keep only largest object
-            
+        feather, close_kernel, open_kernel: smooth_alpha_mask parameters
         Returns:
             Tuple of (person_image_RGBA, mask)
         """
-        # Get segmentation mask
         binary_mask, _ = self.segment(image)
-        
-        # Refine mask with morphological operations
-        person_image_rgba, refined_mask = self.create_person_image(image, binary_mask)
-        
+        person_image_rgba, refined_mask = self.create_person_image(
+            image, binary_mask, feather, close_kernel, open_kernel)
         if keep_largest_only:
             refined_mask = self._keep_largest_component(refined_mask)
-            
-            # Update person image with kept component
             b, g, r = cv2.split(image)
             alpha = refined_mask
             person_image_rgba = cv2.merge((b, g, r, alpha))
-        
         return person_image_rgba, refined_mask
 
 

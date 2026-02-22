@@ -7,6 +7,18 @@ from pydantic import BaseModel, Field, field_validator
 
 class ImageConfig(BaseModel):
     """Configuration for image processing"""
+    # Mask smoothing parameters
+    mask_feather: int = Field(3, description="Feather (px) for mask edge smoothing")
+    mask_close_kernel: int = Field(5, description="Morphological close kernel size (px)")
+    mask_open_kernel: int = Field(3, description="Morphological open kernel size (px)")
+
+from pathlib import Path
+from typing import Optional, Literal
+from pydantic import BaseModel, Field, field_validator
+
+
+class ImageConfig(BaseModel):
+    """Configuration for image processing"""
     
     # Sticker dimensions (PNG with transparency)
     sticker_max_width: int = Field(370, description="Maximum width for sticker")
