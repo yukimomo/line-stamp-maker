@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 from PIL import Image
+import numpy as np
 
 def save_debug_outputs(sticker_id, debug_dir, crop, mask_raw, mask_smooth, cutout, outline, bubble, final):
     """

@@ -1,3 +1,6 @@
+import numpy as np
+import cv2
+
 def select_best_component(mask: np.ndarray, face_center=None) -> np.ndarray:
     """
     マスク内の接続成分から、face_centerがあれば最も近い成分を選択。
@@ -23,6 +26,9 @@ def select_best_component(mask: np.ndarray, face_center=None) -> np.ndarray:
     result = np.zeros_like(mask)
     result[labels == best] = 255
     return result
+
+
+
 import numpy as np
 import cv2
 
@@ -44,8 +50,8 @@ def smooth_alpha_mask(mask: np.ndarray, feather: int = 3, close_kernel: int = 5,
         mask = cv2.morphologyEx(mask, cv2.MORPH_OPEN, kernel)
     # 距離変換によるフェザー
     if feather > 0:
-        dist_out = cv2.distanceTransform(mask == 0, cv2.DIST_L2, 5)
-        dist_in = cv2.distanceTransform(mask == 255, cv2.DIST_L2, 5)
+        dist_out = cv2.distanceTransform((mask == 0).astype(np.uint8), cv2.DIST_L2, 5)
+        dist_in = cv2.distanceTransform((mask == 255).astype(np.uint8), cv2.DIST_L2, 5)
         edge = np.clip((dist_out + dist_in), 0, feather)
         alpha = np.clip((feather - edge) / feather, 0, 1)
         mask = (mask * alpha + 255 * (1 - alpha)).astype(np.uint8)

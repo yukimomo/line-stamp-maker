@@ -45,7 +45,7 @@ class ImageProcessor:
         # Create output directories
         config.create_output_dirs()
     
-    def process_image(self, image_path: Path, text: str = "") -> Tuple[Optional[Image.Image], Optional[Image.Image], Optional[Image.Image]]:
+    def process_image(self, image_path: Path, text: str = "", debug_errors: dict = None) -> Tuple[Optional[Image.Image], Optional[Image.Image], Optional[Image.Image]]:
         """
         Process single image to create sticker, main, and tab versions.
         
@@ -56,46 +56,57 @@ class ImageProcessor:
         Returns:
             Tuple of (sticker_image, main_image, tab_image) or (None, None, None) on error
         """
+        import traceback
         try:
-            # Load image with HEIC/HEIF support
+            stage = 'load'
             img_pil = open_image(image_path)
-            
-            # Convert to BGR for OpenCV operations
+            stage = 'crop'
             img_cv = utils.pil_to_cv2(img_pil)
-            
-            # Step 1: Face detection and cropping
-            if self.config.detect_face and self.face_detector:
-                img_cv, face_info = self.face_detector.crop_to_face(
-                    img_cv,
-                    margin=self.config.face_crop_margin
-                )
-            
-            # Step 2: Person segmentation and cutout
+            stage = 'person_crop'
+            # 人物全体表示モード: segmentation最大成分領域でクロップ
             if self.config.use_segmentation and self.segmenter:
-                # configからマスクパラメータ取得
-                feather = getattr(self.image_config, 'mask_feather', 3)
-                close_kernel = getattr(self.image_config, 'mask_close_kernel', 5)
-                open_kernel = getattr(self.image_config, 'mask_open_kernel', 3)
+                img_cv_before = img_cv.copy()
+                img_cv = self.segmenter.crop_to_person(img_cv)
+                if self.config.verbose:
+                    print(f"[DEBUG] Cropped to person bounding box: shape={img_cv.shape}")
+            stage = 'segment'
+            if self.config.use_segmentation:
+                if self.segmenter is None:
+                    raise RuntimeError("Segmentation is enabled but segmenter is None")
+                feather = 1
+                close_kernel = 3
+                open_kernel = 1
+                # segmentation_maskの出力も保存
+                binary_mask, segmentation_mask = self.segmenter.segment(img_cv)
+                seg_mask_vis = (segmentation_mask * 255).astype(np.uint8)
+                cv2.imwrite("debug_segmentation_mask.png", seg_mask_vis)
                 person_img_rgba, mask = self.segmenter.extract_person(
                     img_cv, keep_largest_only=True,
                     feather=feather, close_kernel=close_kernel, open_kernel=open_kernel)
-                # Convert to PIL
-                b, g, r, a = cv2.split(person_img_rgba)
-                person_img_rgb = cv2.merge((r, g, b, a))
-                person_pil = Image.fromarray(person_img_rgb, mode='RGBA')
+                if self.config.verbose:
+                    # マスクと合成画像を一時保存
+                    cv2.imwrite("debug_mask.png", mask)
+                    cv2.imwrite("debug_person_rgba.png", person_img_rgba)
+                    # アルファマスクも保存
+                    alpha = person_img_rgba[:, :, 3] if person_img_rgba.shape[2] == 4 else mask
+                    cv2.imwrite("debug_alpha_mask.png", alpha)
+                    print("[DEBUG] Saved debug_mask.png, debug_person_rgba.png, debug_alpha_mask.png, debug_segmentation_mask.png")
+                # OpenCVはBGR(A)なのでPIL用に変換
+                person_img_rgba = cv2.cvtColor(person_img_rgba, cv2.COLOR_BGRA2RGBA)
+                person_pil = Image.fromarray(person_img_rgba, mode='RGBA')
             else:
-                # No segmentation, use image as-is
                 person_pil = utils.cv2_to_pil(img_cv).convert('RGBA')
-            
-            # Step 2.5: Resize to maximum sticker size early to speed up processing
+            stage = 'mask'
+            # ...マスク処理
+            stage = 'outline'
+            # ...アウトライン処理
+            stage = 'text'
+            # ...テキスト処理
+            stage = 'save'
             max_size = max(self.image_config.sticker_max_width, self.image_config.sticker_max_height)
             if max(person_pil.width, person_pil.height) > max_size:
                 person_pil.thumbnail((max_size, max_size), Image.Resampling.LANCZOS)
-            
-            # Step 3: Skip white border - keep fully transparent background
             bordered = person_pil
-            
-            # Step 4: Add shadow (optional)
             if self.image_config.shadow_enabled:
                 shadowed = utils.add_shadow(
                     bordered,
@@ -104,8 +115,6 @@ class ImageProcessor:
                 )
             else:
                 shadowed = bordered
-            
-            # Step 5: Add caption
             if text:
                 with_text = self.caption_renderer.render_caption(
                     shadowed,
@@ -119,16 +128,19 @@ class ImageProcessor:
                 )
             else:
                 with_text = shadowed
-            
-            # Step 6: Create different sizes
             sticker = self._resize_to_sticker(with_text)
             main = self._resize_to_main(with_text)
             tab = self._resize_to_tab(with_text)
-            
             return sticker, main, tab
-        
         except Exception as e:
-            print(f"Error processing {image_path}: {e}")
+            tb = traceback.format_exc().splitlines()[-5:]
+            if debug_errors is not None:
+                debug_errors['error'] = {
+                    'type': type(e).__name__,
+                    'message': str(e),
+                    'traceback': tb,
+                    'stage': stage
+                }
             return None, None, None
     
     def _resize_to_sticker(self, image: Image.Image) -> Image.Image:
@@ -211,41 +223,29 @@ class ImageProcessor:
         
         Args:
             mapping: Dictionary of {Path: text}
-            
         Returns:
             Dictionary with processing results
         """
         results = {}
-        
         for i, (image_path, text) in enumerate(mapping.items(), 1):
             if not image_path.exists():
-                print(f"[{i}/{len(mapping)}] File not found: {image_path}")
-                results[image_path.name] = {"status": "error", "message": "File not found"}
+                results[image_path.name] = {"status": "error", "message": "File not found", "stage": "load"}
                 continue
-            
             print(f"[{i}/{len(mapping)}] Processing {image_path.name}...")
-            
-            # Process image
-            sticker, main, tab = self.process_image(image_path, text)
-            
+            debug_errors = {}
+            sticker, main, tab = self.process_image(image_path, text, debug_errors)
             if sticker is None:
-                results[image_path.name] = {"status": "error", "message": "Processing failed"}
+                err = debug_errors.get('error', {})
+                results[image_path.name] = {"status": "error", **err}
                 continue
-            
-            # Generate output name (remove extension, use index)
             base_name = image_path.stem
             output_num = f"{i:02d}"
-            
-            # Save images
             sticker_path, main_path, tab_path = self.save_stickers(sticker, main, tab, output_num)
-            
             results[image_path.name] = {
                 "status": "success",
                 "sticker": str(sticker_path),
                 "main": str(main_path),
                 "tab": str(tab_path)
             }
-            
             print(f"  [OK] Saved to {sticker_path.parent}/{output_num}.png")
-        
         return results

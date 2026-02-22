@@ -1,9 +1,12 @@
+import numpy as np
 """Text rendering functionality for stickers"""
+
 
 from pathlib import Path
 from typing import Optional, Tuple, Literal
 from PIL import Image, ImageDraw, ImageFont
 import textwrap
+import numpy as np
 
 
 # Font preset mappings

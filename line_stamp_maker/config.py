@@ -106,6 +106,7 @@ class ProcessingConfig(BaseModel):
     
     image_config: ImageConfig = Field(default_factory=ImageConfig)
     text_config: TextConfig = Field(default_factory=TextConfig)
+    verbose: bool = Field(False, description="Enable verbose logging")
     
     # Input/Output paths
     photos_dir: Path = Field(Path("photos"), description="Directory containing input photos")

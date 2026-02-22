@@ -1,3 +1,23 @@
+def _preflight_check():
+    missing = []
+    try:
+        import numpy as np
+    except ImportError:
+        missing.append(("numpy", "pip install numpy"))
+    try:
+        import mediapipe
+    except ImportError:
+        missing.append(("mediapipe", "pip install mediapipe"))
+    try:
+        import pillow_heif
+    except ImportError:
+        # pillow-heifはHEIC/HEIF入力時のみ必須
+        pass
+    if missing:
+        for name, cmd in missing:
+            print(f"[ERR] Missing dependency: {name}\n  Install with: {cmd}")
+        sys.exit(1)
+
 """CLI entry point for line-stamp-maker"""
 
 import json
@@ -51,6 +71,7 @@ def _safe_print(text: str, color=None, bold=False) -> None:
     sys.stdout.flush()
 
 
+_preflight_check()
 app = typer.Typer(
     name="line-stamp-maker",
     help="Create LINE stickers from photos with person segmentation and text overlay"
@@ -61,114 +82,108 @@ app = typer.Typer(
 def process(
     photos_dir: Path = typer.Option(
         Path("photos"),
-        "--photos",
-        "-p",
-        help="Directory containing input photos"
+        "--photos", "-p",
+        help="入力画像フォルダ [default: photos]"
     ),
     mapping_file: Path = typer.Option(
         Path("mapping.csv"),
-        "--mapping",
-        "-m",
-        help="CSV file with filename and text mapping (format: filename,text)"
+        "--mapping", "-m",
+        help="マッピング CSV ファイル [default: mapping.csv]"
     ),
     output_dir: Path = typer.Option(
         Path("out"),
-        "--output",
-        "-o",
-        help="Output directory for stickers"
+        "--output", "-o",
+        help="出力フォルダ [default: out]"
     ),
     sticker_width: int = typer.Option(
         370,
         "--sticker-width",
-        help="Maximum sticker width (maintains aspect ratio)"
+        help="ステッカー最大幅 [default: 370]"
     ),
     sticker_height: int = typer.Option(
         320,
         "--sticker-height",
-        help="Maximum sticker height (maintains aspect ratio)"
+        help="ステッカー最大高さ [default: 320]"
     ),
     border_width: int = typer.Option(
         8,
-        "--border",
-        "-b",
-        help="White border width in pixels"
+        "--border", "-b",
+        help="白ふち幅（ピクセル） [default: 8]"
     ),
     font_size: int = typer.Option(
         24,
-        "--font-size",
-        "-f",
-        help="Font size for text overlay"
+        "--font-size", "-f",
+        help="フォントサイズ [default: 24]"
     ),
     font_preset: str = typer.Option(
         "rounded",
         "--font-preset",
-        help="Font preset (rounded, maru, kiwi, noto, indie-flower, kalam, cabin-sketch)"
+        help="フォントプリセット (rounded|maru|kiwi|noto|indie-flower|kalam|cabin-sketch) [default: rounded]"
     ),
     font_path: Optional[Path] = typer.Option(
         None,
         "--font-path",
-        help="Custom font file path (overrides preset)"
+        help="カスタムフォントファイルパス [optional]"
     ),
     caption_style: str = typer.Option(
         "bubble",
         "--caption-style",
-        help="Caption style (band, bubble, none)"
+        help="キャプションスタイル (band, bubble, none) [default: bubble]"
     ),
     caption_outline_px: int = typer.Option(
         6,
         "--caption-outline-px",
-        help="Caption text outline width in pixels"
+        help="キャプション文字の縁取り幅 [default: 6]"
     ),
     caption_padding_ratio: float = typer.Option(
         0.06,
         "--caption-padding-ratio",
-        help="Caption padding ratio relative to canvas"
+        help="キャプション余白比率 [default: 0.06]"
     ),
     caption_max_lines: int = typer.Option(
         2,
         "--caption-max-lines",
-        help="Maximum number of caption lines"
+        help="キャプション最大行数 [default: 2]"
     ),
     caption_text_color: str = typer.Option(
         "255,255,255",
         "--caption-text-color",
-        help="Caption text color as R,G,B (e.g., 255,255,255 for white)"
+        help="キャプション文字色 R,G,B [default: 255,255,255]"
     ),
     caption_outline_color: str = typer.Option(
         "0,0,0",
         "--caption-outline-color",
-        help="Caption text outline color as R,G,B (e.g., 0,0,0 for black)"
+        help="キャプション縁取り色 R,G,B [default: 0,0,0]"
     ),
     ext_priority: str = typer.Option(
         "heic,jpg,jpeg,png,webp",
         "--ext-priority",
-        help="Priority order for file extensions (comma-separated)"
+        help="ファイル拡張子優先度 [default: heic,jpg,jpeg,png,webp]"
     ),
     no_segmentation: bool = typer.Option(
         False,
         "--no-segmentation",
-        help="Skip person segmentation (use image as-is)"
+        help="人物セグメンテーションをスキップ"
     ),
     no_face_detection: bool = typer.Option(
         True,
         "--no-face-detection/--enable-face-detection",
-        help="Skip face detection for cropping (default: skip)"
+        help="顔検出をスキップ [default: --no-face-detection]"
     ),
     no_shadow: bool = typer.Option(
         False,
         "--no-shadow",
-        help="Disable shadow effect"
+        help="影効果を無効化"
     ),
     create_zip: bool = typer.Option(
         True,
         "--zip/--no-zip",
-        help="Create upload.zip for LINE Creators Market"
+        help="ZIP ファイルの作成 [default: --zip]"
     ),
     verbose: bool = typer.Option(
         False,
-        "--verbose",
-        "-v",
-        help="Enable verbose logging"
+        "--verbose", "-v",
+        help="詳細なログを表示"
     ),
 ):
     """
@@ -251,7 +266,8 @@ def process(
         text_config=text_config,
         detect_face=not no_face_detection,
         use_segmentation=not no_segmentation,
-        create_zip=create_zip
+        create_zip=create_zip,
+        verbose=verbose
     )
     
     # Create processor

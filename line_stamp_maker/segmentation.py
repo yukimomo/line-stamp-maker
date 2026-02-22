@@ -9,6 +9,35 @@ from PIL import Image
 
 class PersonSegmenter:
     """Segments person from background using MediaPipe Selfie Segmentation"""
+
+    def crop_to_person(self, image: np.ndarray) -> np.ndarray:
+        """
+        segmentationマスクの最大成分領域で画像をクロップ（人物全体表示）
+        面積が小さい場合は元画像全体を返す
+        """
+        binary_mask, _ = self.segment(image)
+        # マスク全体（255の部分）の外接矩形
+        mask = binary_mask
+        coords = np.column_stack(np.where(mask == 255))
+        if coords.size == 0:
+            return image
+        y_min, x_min = coords.min(axis=0)
+        y_max, x_max = coords.max(axis=0)
+        w = x_max - x_min
+        h = y_max - y_min
+        # 面積閾値（画像全体の10%未満ならノイズとみなす）
+        min_area = image.shape[0] * image.shape[1] * 0.1
+        if w * h < min_area:
+            return image
+        # マージン追加（人物サイズの20%）
+        margin_x = int(w * 0.2)
+        margin_y = int(h * 0.2)
+        x1 = max(0, x_min - margin_x)
+        y1 = max(0, y_min - margin_y)
+        x2 = min(image.shape[1], x_max + margin_x)
+        y2 = min(image.shape[0], y_max + margin_y)
+        cropped = image[y1:y2, x1:x2]
+        return cropped
     
     def __init__(self, model_selection: int = 1):
         """
@@ -41,9 +70,21 @@ class PersonSegmenter:
         # Get segmentation mask
         segmentation_mask = results.segmentation_mask
         
+        # segmentation_maskは人物領域が低値（黒）、背景が高値（白）なので反転
+        segmentation_mask = 1.0 - segmentation_mask
         # The mask values are 0 (background) to 1 (foreground/person)
-        # Convert to binary mask (0-255)
-        binary_mask = (segmentation_mask > 0.5).astype(np.uint8) * 255
+        # Convert to binary mask (0-255), threshold=0.9
+        binary_mask = (segmentation_mask > 0.9).astype(np.uint8) * 255
+
+        # ノイズ除去: 小さな領域（面積2%未満）は除外
+        contours, _ = cv2.findContours(binary_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        min_area = binary_mask.shape[0] * binary_mask.shape[1] * 0.02
+        mask_clean = np.zeros_like(binary_mask)
+        for cnt in contours:
+            area = cv2.contourArea(cnt)
+            if area >= min_area:
+                cv2.drawContours(mask_clean, [cnt], -1, 255, -1)
+        binary_mask = mask_clean
         
         return binary_mask, segmentation_mask
     
@@ -98,13 +139,15 @@ class PersonSegmenter:
             Tuple of (person_image_RGBA, mask)
         """
         binary_mask, _ = self.segment(image)
-        person_image_rgba, refined_mask = self.create_person_image(
-            image, binary_mask, feather, close_kernel, open_kernel)
+        # 最大成分抽出は滑らか化前のバイナリマスクで行う
         if keep_largest_only:
-            refined_mask = self._keep_largest_component(refined_mask)
-            b, g, r = cv2.split(image)
-            alpha = refined_mask
-            person_image_rgba = cv2.merge((b, g, r, alpha))
+            binary_mask = self._keep_largest_component(binary_mask)
+        # 滑らか化してアルファマスク生成
+        from .mask import smooth_alpha_mask
+        refined_mask = smooth_alpha_mask(binary_mask, feather, close_kernel, open_kernel)
+        b, g, r = cv2.split(image)
+        alpha = refined_mask
+        person_image_rgba = cv2.merge((b, g, r, alpha))
         return person_image_rgba, refined_mask
 
 

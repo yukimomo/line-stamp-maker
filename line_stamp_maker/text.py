@@ -1,4 +1,6 @@
+
 import re
+import numpy as np
 
 def wrap_japanese_text(text, font, max_width, max_lines=2):
     """
