@@ -1,9 +1,3 @@
-        caption_style: Literal["band", "bubble", "none"] = Field("bubble", description="Caption style (band, bubble, none)")
-        bubble_stroke: int = Field(3, description="Bubble stroke width (px)")
-        bubble_shadow: bool = Field(True, description="Enable bubble shadow")
-    outline_outer: int = Field(10, description="Outer outline thickness (px)")
-    outline_inner: int = Field(4, description="Inner outline thickness (px)")
-    shadow_enabled: bool = Field(True, description="Enable sticker shadow")
 """Configuration and Pydantic models for LINE stamp maker"""
 
 from pathlib import Path
