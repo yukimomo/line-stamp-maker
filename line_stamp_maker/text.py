@@ -1,3 +1,40 @@
+import re
+
+def wrap_japanese_text(text, font, max_width, max_lines=2):
+    """
+    日本語テキストを幅・改行位置・省略でラップ
+    - font.getlengthで幅計測
+    - 区切り文字や日本語間で改行
+    - 最大行数超過時は省略
+    Returns: list[str]
+    """
+    breaks = r'[、,；。.！？・ー\s]'
+    lines = []
+    buf = ''
+    for c in text:
+        buf += c
+        if font.getlength(buf) > max_width:
+            # 区切り文字優先
+            m = re.search(breaks, buf[::-1])
+            if m:
+                idx = len(buf) - m.start()
+                lines.append(buf[:idx])
+                buf = buf[idx:]
+            else:
+                lines.append(buf[:-1])
+                buf = c
+            if len(lines) == max_lines-1:
+                break
+    if buf:
+        lines.append(buf)
+    # 行数超過時は省略
+    if len(lines) > max_lines:
+        lines = lines[:max_lines]
+        if len(lines[-1]) > 1:
+            lines[-1] = lines[-1][:-1] + '…'
+        else:
+            lines[-1] = '…'
+    return lines
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import numpy as np
 
